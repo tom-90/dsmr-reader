@@ -42,17 +42,11 @@ class DataloggerDsmrReading(View):
             logger.warning("API validation failed with POST data: %s", request.POST)
             return HttpResponseBadRequest("Invalid data")
 
-        dsmr_reading = None
-
         try:
-            dsmr_reading = dsmr_datalogger.services.datalogger.telegram_to_reading(
+            dsmr_datalogger.services.datalogger.telegram_to_reading(
                 data=post_form.cleaned_data["telegram"]
             )
         except InvalidTelegramError:
-            # The service called already logs the error.
-            pass
-
-        if not dsmr_reading:
             return HttpResponseServerError(content="Failed to parse telegram")
 
         return HttpResponse(status=201)
