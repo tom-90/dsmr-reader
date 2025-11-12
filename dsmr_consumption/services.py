@@ -21,6 +21,7 @@ from dsmr_consumption.models.consumption import (
 from dsmr_consumption.models.settings import ConsumptionSettings
 from dsmr_consumption.models.energysupplier import EnergySupplierPrice
 from dsmr_datalogger.models.reading import DsmrReading
+from dsmr_datalogger.models.memory_reading import DsmrMemoryReading
 from dsmr_frontend.models.settings import FrontendSettings
 from dsmr_stats.models.statistics import DayStatistics
 from dsmr_weather.models.reading import TemperatureReading
@@ -541,11 +542,20 @@ def day_consumption(day: datetime.date) -> Dict:
 def live_electricity_consumption() -> Dict:
     """Returns the current latest/live electricity consumption."""
     data = {}
+    latest_reading = None
 
     try:
-        latest_reading = DsmrReading.objects.all().order_by("-timestamp")[0]
-    except IndexError:
-        return data
+        latest_reading = DsmrMemoryReading.get_solo()
+        if not latest_reading.timestamp:
+            latest_reading = None
+    except Exception:
+        pass
+
+    if not latest_reading:
+        try:
+            latest_reading = DsmrReading.objects.all().order_by("-timestamp")[0]
+        except IndexError:
+            return data
 
     latest_timestamp = timezone.localtime(latest_reading.timestamp)
 

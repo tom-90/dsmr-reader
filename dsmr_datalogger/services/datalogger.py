@@ -7,6 +7,7 @@ from django.db import connection
 import serial
 
 from dsmr_datalogger.models.reading import DsmrReading
+from dsmr_datalogger.models.memory_reading import DsmrMemoryReading
 from dsmr_datalogger.models.statistics import MeterStatistics
 from dsmr_datalogger.models.settings import DataloggerSettings
 from dsmr_datalogger.exceptions import InvalidTelegramError
@@ -74,7 +75,7 @@ def get_telegram_generator() -> Iterator:
     )
 
 
-def telegram_to_reading(data: str) -> DsmrReading:
+def telegram_to_reading(data: str) -> Optional[DsmrReading]:
     """Converts a P1 telegram to a DSMR reading, which will be stored in database."""
     params = get_dsmr_connection_parameters()
     parser = TelegramParser(params["specifications"])
@@ -169,6 +170,22 @@ def _map_telegram_to_model(parsed_telegram: Dict, data: str):
     # Now we need to split reading & statistics. So we split the dict here.
     reading_kwargs = {k: model_fields[k] for k in READING_FIELDS}
     statistics_kwargs = {k: model_fields[k] for k in STATISTICS_FIELDS}
+
+    last_reading = DsmrMemoryReading.get_solo()
+
+    now = timezone.now()
+    should_skip_persist = (
+        last_reading.update_timestamp is None
+        or (now - last_reading.update_timestamp).total_seconds()
+        < float(datalogger_settings.process_sleep)
+    )
+    memory_reading_kwargs = reading_kwargs.copy()
+    if not should_skip_persist:
+        memory_reading_kwargs["update_timestamp"] = now
+    last_reading.update(**memory_reading_kwargs)
+
+    if should_skip_persist:
+        return None
 
     # Reading will be processed later.
     new_instance = DsmrReading.objects.create(**reading_kwargs)
